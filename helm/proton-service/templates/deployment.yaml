@@ -1,0 +1,109 @@
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "proton-service.fullname" . }}
+  labels:
+    {{- include "proton-service.labels" . | nindent 4 }}
+spec:
+  replicas: {{ .Values.replicaCount }}
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  strategy:
+    type: Recreate
+  selector:
+    matchLabels:
+      {{- include "proton-service.selectorLabels" . | nindent 6 }}
+  template:
+    metadata:
+      labels:
+        {{- include "proton-service.selectorLabels" . | nindent 8 }}
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: {{ .Chart.Name }}
+        image: {{ include "proton-service.image" . | quote }}
+        imagePullPolicy: {{ .Values.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.service.port }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /health
+            port: http
+          {{- toYaml .Values.probes.liveness | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /health
+            port: http
+          {{- toYaml .Values.probes.readiness | nindent 10 }}
+        env:
+        - name: PORT
+          value: {{ .Values.env.port | quote }}
+        - name: LOG_LEVEL
+          value: {{ .Values.env.logLevel | quote }}
+        - name: DATA_DIR
+          value: {{ .Values.env.dataDir | quote }}
+        - name: PROTON_PASSWORD
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.secret.name }}
+              key: proton-password
+        {{- if .Values.apiAuth.enabled }}
+        - name: PROTON_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.apiAuth.secretName }}
+              key: {{ .Values.apiAuth.secretKey }}
+        {{- else }}
+        - name: PROTON_ALLOW_UNAUTHENTICATED
+          value: "true"
+        {{- end }}
+        - name: PROTON_APP_VERSION
+          value: {{ .Values.env.appVersion | quote }}
+        {{- if .Values.writeKey.enabled }}
+        - name: PROTON_WRITE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.writeKey.secretName }}
+              key: {{ .Values.writeKey.secretKey }}
+              optional: true
+        {{- else }}
+        - name: PROTON_ALLOW_WRITES_WITHOUT_KEY
+          value: "true"
+        {{- end }}
+        volumeMounts:
+        - name: data
+          mountPath: {{ .Values.env.dataDir }}
+        resources:
+          {{- toYaml .Values.resources | nindent 12 }}
+      volumes:
+      - name: data
+        {{- if .Values.persistence.enabled }}
+        persistentVolumeClaim:
+          claimName: {{ include "proton-service.fullname" . }}-data
+        {{- else }}
+        emptyDir: {}
+        {{- end }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}

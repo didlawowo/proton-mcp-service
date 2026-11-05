@@ -1,0 +1,201 @@
+version: '3'
+
+vars:
+  APP_NAME: proton-service
+  MAIN_PACKAGE: ./cmd/server
+  BIN_DIR: bin
+
+env:
+  CGO_ENABLED: "0"
+
+tasks:
+  default:
+    desc: Show available tasks
+    cmds:
+      - task --list
+
+  build:
+    desc: Compile the application
+    cmds:
+      - go build -o {{.BIN_DIR}}/{{.APP_NAME}} {{.MAIN_PACKAGE}}
+    sources:
+      - ./**/*.go
+    generates:
+      - "{{.BIN_DIR}}/{{.APP_NAME}}"
+
+  run:
+    desc: Build and run the application
+    deps: [build]
+    cmds:
+      - ./{{.BIN_DIR}}/{{.APP_NAME}}
+    env:
+      LOG_LEVEL: debug
+      DATA_DIR: ./data
+      PORT: "8080"
+
+  dev:
+    desc: Run with air (hot reload)
+    cmds:
+      - air
+    env:
+      LOG_LEVEL: debug
+      DATA_DIR: ./data
+      PORT: "8080"
+
+  test:
+    desc: Run all tests
+    cmds:
+      - go test ./...
+
+  test-race:
+    desc: Run tests with race detector
+    cmds:
+      - go test -race ./...
+
+  test-cover:
+    desc: Generate test coverage report
+    cmds:
+      - go test -coverprofile=coverage.out ./...
+      - go tool cover -func=coverage.out
+
+  lint:
+    desc: Run golangci-lint
+    cmds:
+      - golangci-lint run
+
+  fmt:
+    desc: Format Go code
+    cmds:
+      - gofmt -w .
+
+  vet:
+    desc: Run go vet
+    cmds:
+      - go vet ./...
+
+  tidy:
+    desc: Tidy Go modules
+    cmds:
+      - go mod tidy
+
+  docker-build:
+    desc: Build Docker image
+    cmds:
+      - docker build -t {{.APP_NAME}} .
+
+  docker-build-arm64:
+    desc: Build Docker image for arm64
+    cmds:
+      - docker buildx build --platform linux/arm64 -t {{.APP_NAME}}:arm64 .
+
+  ci:
+    desc: Full CI pipeline (fmt, vet, lint, test, build)
+    cmds:
+      - task: fmt
+      - task: vet
+      - task: lint
+      - task: test
+      - task: build
+
+  clean:
+    desc: Remove build artifacts
+    cmds:
+      - rm -rf {{.BIN_DIR}} coverage.out coverage.html
+
+  # ──────────────────────────────────────
+  # API Testing
+  # ──────────────────────────────────────
+
+  api:health:
+    desc: Check health endpoint
+    cmds:
+      - http GET localhost:8080/health
+
+  api:status:
+    desc: Check auth status
+    cmds:
+      - http GET localhost:8080/api/v1/auth/status
+
+  api:login:
+    desc: "Login (usage: task api:login -- user@proton.me)"
+    cmds:
+      - 'test -n "{{.CLI_ARGS}}" || (echo "Usage: task api:login -- user@proton.me" && exit 1)'
+      - http POST localhost:8080/api/v1/auth/login username="{{.CLI_ARGS}}"
+
+  api:2fa:
+    desc: "Submit 2FA code (usage: task api:2fa -- 123456)"
+    cmds:
+      - http POST localhost:8080/api/v1/auth/2fa code="{{.CLI_ARGS}}"
+
+  proton:mfa:
+    desc: "Login + CAPTCHA/HV + 2FA interactif (usage: task proton:mfa -- user@proton.me)"
+    cmds:
+      - |
+        USER="{{.CLI_ARGS}}"
+        if [ -z "$USER" ]; then echo "Usage: task proton:mfa -- user@proton.me"; exit 1; fi
+        echo "📬 Login ProtonMail ($USER)..."
+        RESULT=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+          -H "Content-Type: application/json" \
+          -d "{\"username\":\"$USER\"}")
+        echo "$RESULT" | python3 -m json.tool
+
+        NEEDS_HV=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('hv_required', False))")
+        if [ "$NEEDS_HV" = "True" ]; then
+          URL=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('verify_url',''))")
+          echo "🧩 Vérification humaine requise :"
+          echo "   1. Ouvre: $URL"
+          echo "   2. AVANT de résoudre, ouvre la console navigateur (F12 > Console) et colle :"
+          echo '      window.addEventListener("message", e => { let d = typeof e.data === "string" ? JSON.parse(e.data) : e.data; if (d.type === "HUMAN_VERIFICATION_SUCCESS") { document.title = "TOKEN:" + d.payload.token; console.log("TOKEN:", d.payload.token); } })'
+          echo "   3. Résous le CAPTCHA."
+          echo "   4. Le token apparaît dans la console / titre de la page — colle-le ci-dessous."
+          printf "HV token: "
+          read -r HVT
+          RESULT=$(curl -s -X POST http://localhost:8080/api/v1/auth/login \
+            -H "Content-Type: application/json" \
+            -d "{\"username\":\"$USER\",\"hv_token\":\"$HVT\"}")
+          echo "$RESULT" | python3 -m json.tool
+        fi
+
+        NEEDS_2FA=$(echo "$RESULT" | python3 -c "import sys,json; print(json.load(sys.stdin).get('needs_2fa', False))")
+        if [ "$NEEDS_2FA" = "True" ]; then
+          echo ""
+          printf "🔑 Code TOTP: "
+          read -r CODE
+          curl -s -X POST http://localhost:8080/api/v1/auth/2fa \
+            -H "Content-Type: application/json" \
+            -d "{\"code\":\"$CODE\"}" | python3 -m json.tool
+        fi
+
+  api:messages:
+    desc: List inbox messages with attachments
+    cmds:
+      - http GET localhost:8080/api/v1/messages has_attachments==true limit==20
+
+  api:message:
+    desc: "Get a specific message (usage: task api:message -- MESSAGE_ID)"
+    cmds:
+      - http GET localhost:8080/api/v1/messages/{{.CLI_ARGS}}
+
+  api:calendars:
+    desc: List calendars (id, name, color)
+    cmds:
+      - http GET localhost:8080/api/v1/calendars
+
+  api:calendar-events:
+    desc: "List events of a calendar (usage: task api:calendar-events -- CALENDAR_ID, récupérez l'ID avec api:calendars)"
+    cmds:
+      - 'test -n "{{.CLI_ARGS}}" || (echo "Manque CALENDAR_ID - lancez: task api:calendars" && exit 1)'
+      - http GET localhost:8080/api/v1/calendars/{{.CLI_ARGS}}/events
+
+  api:calendar-create-event:
+    desc: "Créer un événement (usage: task api:calendar-create-event -- CALENDAR_ID 'Titre' START END [WRITE_KEY])"
+    cmds:
+      - 'test -n "{{.CLI_ARGS}}" || (echo "Manque CALENDAR_ID - lancez: task api:calendars" && exit 1)'
+      - 'http POST localhost:8080/api/v1/calendars/{{index .CLI_ARGS 0}}/events summary="{{index .CLI_ARGS 1}}" start_time:={{index .CLI_ARGS 2}} end_time:={{index .CLI_ARGS 3}} "X-Write-Key:{{index .CLI_ARGS 4}}"'
+
+  api:calendar-delete-event:
+    desc: "Supprimer un événement (usage: task api:calendar-delete-event -- CALENDAR_ID EVENT_ID WRITE_KEY)"
+    cmds:
+      - 'test -n "{{.CLI_ARGS}}" || (echo "Manque CALENDAR_ID - lancez: task api:calendars" && exit 1)'
+      - 'http DELETE localhost:8080/api/v1/calendars/{{index .CLI_ARGS 0}}/events/{{index .CLI_ARGS 1}} "X-Write-Key:{{index .CLI_ARGS 2}}"'
+

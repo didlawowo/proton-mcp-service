@@ -1,0 +1,145 @@
+replicaCount: 1
+revisionHistoryLimit: 2
+
+image:
+  repository: ghcr.io/didlawowo/proton-service
+  # Tag immutable (semver) : upgrade = bump explicite du tag dans Git.
+  # Vide = v<appVersion> du Chart.yaml (cf. _helpers.tpl). Eviter `latest`
+  # + Always : re-pull silencieux a chaque sync, non-reproductible.
+  pullPolicy: IfNotPresent
+  tag: ""
+
+imagePullSecrets: []
+nameOverride: ""
+fullnameOverride: ""
+podAnnotations: {}
+
+service:
+  type: ClusterIP
+  port: 8080
+
+resources:
+  limits:
+    cpu: 500m
+    memory: 256Mi
+  requests:
+    cpu: 100m
+    memory: 64Mi
+
+# Probes /health. TimeoutSeconds genereux : le handler peut lire le fichier de
+# session sur un PVC lent pendant que le pod est throttlé CPU. Un timeout de 1s
+# (defaut k8s) fait echouer la liveness -> restart (SIGKILL 137).
+probes:
+  liveness:
+    initialDelaySeconds: 10
+    periodSeconds: 30
+    timeoutSeconds: 5
+    failureThreshold: 5
+    successThreshold: 1
+  readiness:
+    initialDelaySeconds: 5
+    periodSeconds: 15
+    timeoutSeconds: 5
+    failureThreshold: 3
+    successThreshold: 1
+
+nodeSelector: {}
+tolerations: []
+affinity: {}
+
+# Persistance de la session Proton (session.json). storageClass vide = classe
+# par defaut du cluster.
+persistence:
+  enabled: true
+  storageClass: ""
+  accessMode: ReadWriteOnce
+  size: 100Mi
+  annotations: {}
+
+env:
+  port: "8080"
+  logLevel: "info"
+  dataDir: "/data"
+  # X-Pm-Appversion envoye a Proton. Determine les scopes produits :
+  # macos-bridge (defaut) = mail uniquement ; Other = mail + calendar (+drive).
+  # Le calendrier exige "Other".
+  appVersion: "macos-bridge@3.23.1"
+
+# API authentication is enabled by default. Provision the named Kubernetes
+# Secret with an api-key before deploying. Disable only on a trusted network.
+apiAuth:
+  enabled: true
+  secretName: proton-service-api-key
+  secretKey: api-key
+
+# Mot de passe d'ecriture pour les actions mutables (envoi d'email, creation et
+# suppression d'evenement).
+# - enabled: true  : l'en-tete X-Write-Key doit correspondre a PROTON_WRITE_SECRET,
+#   lu depuis le Secret ci-dessous. Secret absent = ecritures desactivees.
+# - enabled: false : ecritures autorisees sans mot de passe
+#   (PROTON_ALLOW_WRITES_WITHOUT_KEY=true). A reserver a une API joignable
+#   uniquement depuis un reseau de confiance.
+writeKey:
+  enabled: true
+  secretName: proton-service-pass
+  secretKey: password
+
+# Ingress standard optionnel (ingress-nginx, Traefik, ...). Activez-le si vous
+# n'utilisez pas la Gateway API.
+ingress:
+  enabled: false
+  className: ""
+  annotations: {}
+  hosts:
+    - host: proton-service.example.com
+      paths:
+        - path: /
+          pathType: Prefix
+  tls: []
+
+# Exposure via la Gateway API (Gateway API CRDs requis). Desactivee par defaut :
+# renseignez parentRefs (votre Gateway) et hostnames, puis activez.
+gateway:
+  enabled: false
+  parentRefs:
+    - name: my-gateway
+      namespace: default
+  hostnames:
+    - proton-service.example.com
+
+# Secret prealablement cree dans le namespace (cle attendue : proton-password).
+secret:
+  name: proton-service
+
+# Serveur MCP (HTTP) au-dessus de l'API proton-service. Interne (ClusterIP), protege
+# par un token (cle mcp-auth-token du Secret ci-dessus, ou secretName/key surcharges).
+# L'image Dockerfile.mcp est buildée/poussee par le workflow release-public.yml.
+mcp:
+  enabled: true
+  gateway:
+    enabled: false
+    parentRefs:
+      - name: my-gateway
+        namespace: default
+    hostnames:
+      - proton-service-mcp.example.com
+  image:
+    repository: ghcr.io/didlawowo/proton-service-mcp
+    # Tag immutable (semver), voir image.tag ci-dessus.
+    pullPolicy: IfNotPresent
+    tag: ""
+  port: 9090
+  # Utilisateur Proton par defaut du MCP (proton_login). Peut rester vide :
+  # le client MCP passe alors username= explicitement.
+  username: ""
+  # Token d'acces : cle dans le secret (defaut: meme secret que proton-password).
+  authToken:
+    secretName: ""
+    key: mcp-auth-token
+  resources:
+    limits:
+      cpu: 200m
+      memory: 128Mi
+    requests:
+      cpu: 50m
+      memory: 64Mi

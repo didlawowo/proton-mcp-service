@@ -1,0 +1,28 @@
+# Version control
+.git
+.gitignore
+
+# Local data & secrets — ne jamais envoyer dans le build
+data/
+.env
+.envrc
+
+# Build artifacts
+bin/
+tmp/
+server
+coverage.out
+coverage.html
+
+# Helm & CI — inutiles dans l'image
+helm/
+.github/
+
+# Python
+__pycache__/
+*.pyc
+.venv/
+.pytest_cache/
+
+# Docs
+*.md

@@ -1,0 +1,21 @@
+{{- if .Values.mcp.enabled }}
+apiVersion: v1
+kind: Service
+metadata:
+  name: {{ include "proton-service.fullname" . }}-mcp
+  labels:
+    {{- include "proton-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  # ClusterIP uniquement : le MCP (lecture/envoi d'emails) reste interne,
+  # jamais routé publiquement. Accès en preview via `kubectl port-forward`.
+  type: ClusterIP
+  ports:
+  - port: {{ .Values.mcp.port }}
+    targetPort: http
+    protocol: TCP
+    name: http
+  selector:
+    app.kubernetes.io/name: {{ include "proton-service.name" . }}-mcp
+    app.kubernetes.io/instance: {{ .Release.Name }}
+{{- end }}

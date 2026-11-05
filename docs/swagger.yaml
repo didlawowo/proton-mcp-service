@@ -1,0 +1,357 @@
+basePath: /api/v1
+definitions:
+  github_com_didlawowo_proton-mcp-service_pkg_proton.CreateCalendarEventRequest:
+    properties:
+      description:
+        type: string
+      end_time:
+        type: integer
+      full_day:
+        type: boolean
+      location:
+        type: string
+      start_time:
+        description: StartTime/EndTime are unix timestamps.
+        type: integer
+      summary:
+        type: string
+      timezone:
+        description: IANA name, optional (UTC if empty)
+        type: string
+    type: object
+  pkg_api.attachmentReq:
+    properties:
+      content:
+        description: base64
+        type: string
+      filename:
+        type: string
+      mime_type:
+        type: string
+    type: object
+  pkg_api.loginRequest:
+    properties:
+      hv_token:
+        type: string
+      username:
+        type: string
+    type: object
+  pkg_api.sendRequest:
+    properties:
+      action:
+        description: 'Action : reply | reply_all | forward (ignorée si InReplyTo vide).'
+        type: string
+      attachments:
+        items:
+          $ref: '#/definitions/pkg_api.attachmentReq'
+        type: array
+      body:
+        type: string
+      cc:
+        items:
+          type: string
+        type: array
+      from:
+        description: |-
+          From : adresse d'envoi optionnelle (adresse active du compte).
+          Vide = adresse primaire.
+        type: string
+      html:
+        type: string
+      in_reply_to:
+        description: 'InReplyTo : ID interne Proton du message parent (threading reply/forward).'
+        type: string
+      subject:
+        type: string
+      to:
+        items:
+          type: string
+        type: array
+    type: object
+host: localhost:8080
+info:
+  contact: {}
+  description: Micro-service Proton Mail + Calendar (Go + MCP). Envoi d'emails, threading
+    (reply/forward), calendrier chiffré.
+  title: Proton Service API
+  version: 1.0.0
+paths:
+  /addresses:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: addresses, count
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Lister les adresses du compte
+      tags:
+      - messages
+  /auth/login:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Identifiants
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/pkg_api.loginRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: authenticated
+          schema:
+            additionalProperties: true
+            type: object
+        "202":
+          description: 2fa_required
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "428":
+          description: human verification required
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Initier l'authentification Proton
+      tags:
+      - auth
+  /calendars:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: calendars, count
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Lister les calendriers
+      tags:
+      - calendar
+  /calendars/{id}/events:
+    get:
+      parameters:
+      - description: ID du calendrier
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: 'Timestamp Unix (secondes) : ne renvoie que les événements débutant
+          à partir de cette date'
+        in: query
+        name: from
+        type: integer
+      - description: 'Timestamp Unix (secondes) : ne renvoie que les événements débutant
+          avant cette date'
+        in: query
+        name: to
+        type: integer
+      - description: Fuseau IANA (ex. Europe/Paris) utilisé par Proton pour placer
+          les événements sur la journée entière dans la fenêtre ; défaut UTC
+        in: query
+        name: timezone
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: events, count
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Lister les événements d'un calendrier
+      tags:
+      - calendar
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: ID du calendrier
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: Événement (summary, start, end, full_day, description, location)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/github_com_didlawowo_proton-mcp-service_pkg_proton.CreateCalendarEventRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'status: created, event'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+        WriteKey: []
+      summary: Créer un événement chiffré
+      tags:
+      - calendar
+  /calendars/{id}/events/{eventId}:
+    delete:
+      parameters:
+      - description: ID du calendrier
+        in: path
+        name: id
+        required: true
+        type: string
+      - description: ID de l'événement
+        in: path
+        name: eventId
+        required: true
+        type: string
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'status: deleted'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+        WriteKey: []
+      summary: Supprimer un événement
+      tags:
+      - calendar
+  /labels:
+    get:
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: labels, count
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+      summary: Lister les labels et dossiers
+      tags:
+      - messages
+  /messages/send:
+    post:
+      consumes:
+      - application/json
+      parameters:
+      - description: Email à envoyer (in_reply_to + action pour répondre/transférer
+          dans le fil)
+        in: body
+        name: request
+        required: true
+        schema:
+          $ref: '#/definitions/pkg_api.sendRequest'
+      produces:
+      - application/json
+      responses:
+        "200":
+          description: 'status: sent, message_id'
+          schema:
+            additionalProperties: true
+            type: object
+        "400":
+          description: Bad Request
+          schema:
+            additionalProperties: true
+            type: object
+        "401":
+          description: Unauthorized
+          schema:
+            additionalProperties: true
+            type: object
+        "403":
+          description: Forbidden
+          schema:
+            additionalProperties: true
+            type: object
+      security:
+      - ApiKeyAuth: []
+        WriteKey: []
+      summary: Envoyer un email
+      tags:
+      - messages
+security:
+- ApiKeyAuth: []
+securityDefinitions:
+  ApiKeyAuth:
+    in: header
+    name: X-API-Key
+    type: apiKey
+  WriteKey:
+    in: header
+    name: X-Write-Key
+    type: apiKey
+swagger: "2.0"

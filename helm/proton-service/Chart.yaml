@@ -1,0 +1,19 @@
+apiVersion: v2
+name: proton-service
+description: Proton Mail + Calendar micro-service with an MCP server for AI agents
+type: application
+version: 0.8.1
+appVersion: "0.8.1"
+annotations:
+  artifacthub.io/license: MIT
+keywords:
+  - proton
+  - protonmail
+  - calendar
+  - mcp
+home: https://github.com/didlawowo/proton-mcp-service
+sources:
+  - https://github.com/didlawowo/proton-mcp-service
+maintainers:
+  - name: didlawowo
+    url: https://github.com/didlawowo

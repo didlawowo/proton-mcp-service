@@ -1,0 +1,98 @@
+{{- if .Values.mcp.enabled }}
+apiVersion: apps/v1
+kind: Deployment
+metadata:
+  name: {{ include "proton-service.fullname" . }}-mcp
+  labels:
+    {{- include "proton-service.labels" . | nindent 4 }}
+    app.kubernetes.io/component: mcp
+spec:
+  replicas: 1
+  revisionHistoryLimit: {{ .Values.revisionHistoryLimit }}
+  selector:
+    matchLabels:
+      app.kubernetes.io/name: {{ include "proton-service.name" . }}-mcp
+      app.kubernetes.io/instance: {{ .Release.Name }}
+  template:
+    metadata:
+      labels:
+        app.kubernetes.io/name: {{ include "proton-service.name" . }}-mcp
+        app.kubernetes.io/instance: {{ .Release.Name }}
+        app.kubernetes.io/component: mcp
+      {{- with .Values.podAnnotations }}
+      annotations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+    spec:
+      {{- with .Values.imagePullSecrets }}
+      imagePullSecrets:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      securityContext:
+        runAsNonRoot: true
+        runAsUser: 1000
+        fsGroup: 1000
+      containers:
+      - name: mcp
+        image: {{ include "proton-service.mcpImage" . | quote }}
+        imagePullPolicy: {{ .Values.mcp.image.pullPolicy }}
+        ports:
+        - name: http
+          containerPort: {{ .Values.mcp.port }}
+          protocol: TCP
+        livenessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          {{- toYaml .Values.probes.liveness | nindent 10 }}
+        readinessProbe:
+          httpGet:
+            path: /healthz
+            port: http
+          {{- toYaml .Values.probes.readiness | nindent 10 }}
+        env:
+        - name: MCP_TRANSPORT
+          value: "http"
+        - name: MCP_HOST
+          value: "0.0.0.0"
+        - name: MCP_PORT
+          value: {{ .Values.mcp.port | quote }}
+        - name: PROTON_SERVICE_URL
+          value: "http://{{ include "proton-service.fullname" . }}.{{ .Release.Namespace }}.svc:{{ .Values.service.port }}"
+        - name: PROTON_USERNAME
+          value: {{ .Values.mcp.username | quote }}
+        - name: MCP_AUTH_TOKEN
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.mcp.authToken.secretName | default .Values.secret.name }}
+              key: {{ .Values.mcp.authToken.key }}
+        {{- if .Values.apiAuth.enabled }}
+        - name: PROTON_API_KEY
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.apiAuth.secretName }}
+              key: {{ .Values.apiAuth.secretKey }}
+        {{- end }}
+        {{- if .Values.writeKey.enabled }}
+        - name: PROTON_WRITE_SECRET
+          valueFrom:
+            secretKeyRef:
+              name: {{ .Values.writeKey.secretName }}
+              key: {{ .Values.writeKey.secretKey }}
+              optional: true
+        {{- end }}
+        resources:
+          {{- toYaml .Values.mcp.resources | nindent 12 }}
+      {{- with .Values.nodeSelector }}
+      nodeSelector:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.tolerations }}
+      tolerations:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+      {{- with .Values.affinity }}
+      affinity:
+        {{- toYaml . | nindent 8 }}
+      {{- end }}
+{{- end }}

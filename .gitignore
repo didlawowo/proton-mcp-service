@@ -1,0 +1,28 @@
+bin/
+data/
+/server
+coverage.out
+coverage.html
+tmp/
+.task/
+.env
+.envrc
+.DS_Store
+.venv/
+.pytest_cache/
+.claude/
+__pycache__/
+
+# Checkout local des reusable actions workflow-ci
+.workflow-ci/
+
+# SonarScanner artifacts
+.scannerwork/
+
+# Editors
+.idea/
+.vscode/
+
+# Local key material
+*.key
+*.pem
