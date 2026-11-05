@@ -18,6 +18,12 @@ It is built around
 > This repository is a published snapshot: each release arrives as a single commit,
 > and no CI runs here. See [CONTRIBUTING.md](CONTRIBUTING.md).
 
+The project is distributed through the public snapshot
+[didlawowo/proton-mcp-service](https://github.com/didlawowo/proton-mcp-service).
+The API image is `ghcr.io/didlawowo/proton-mcp-service`, the MCP image is
+`ghcr.io/didlawowo/proton-mcp-service-mcp`, and the Helm chart is
+`oci://ghcr.io/didlawowo/charts/proton-service`.
+
 ## Why this project
 
 Most Proton MCP servers sit on top of
@@ -122,7 +128,7 @@ for clients that need to send mail or modify the calendar.
 
 ```bash
 docker volume create proton-service-data
-docker run -d --name proton-service --env-file=.env -e PROTON_APP_VERSION=Other -v proton-service-data:/data -p 127.0.0.1:8080:8080 ghcr.io/didlawowo/proton-service:latest
+docker run -d --name proton-service --env-file=.env -e PROTON_APP_VERSION=Other -v proton-service-data:/data -p 127.0.0.1:8080:8080 ghcr.io/didlawowo/proton-mcp-service:latest
 ```
 
 > `--env-file` keeps secrets out of shell history; container environment values
@@ -298,7 +304,7 @@ Notable values (see [helm/proton-service/values.yaml](helm/proton-service/values
 
 | Value | Default | Notes |
 |---|---|---|
-| `image.repository` / `mcp.image.repository` | `ghcr.io/didlawowo/proton-service[-mcp]` | tag defaults to `v<appVersion>` |
+| `image.repository` / `mcp.image.repository` | `ghcr.io/didlawowo/proton-mcp-service[-mcp]` | tag defaults to `v<appVersion>` |
 | `gateway.enabled` + `parentRefs`/`hostnames` | `false` | Gateway API exposure (CRDs required) |
 | `ingress.enabled` | `false` | plain Ingress alternative |
 | `persistence.storageClass` | `""` | cluster default |

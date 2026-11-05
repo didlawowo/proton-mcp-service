@@ -2,7 +2,7 @@ replicaCount: 1
 revisionHistoryLimit: 2
 
 image:
-  repository: ghcr.io/didlawowo/proton-service
+  repository: ghcr.io/didlawowo/proton-mcp-service
   # Tag immutable (semver) : upgrade = bump explicite du tag dans Git.
   # Vide = v<appVersion> du Chart.yaml (cf. _helpers.tpl). Eviter `latest`
   # + Always : re-pull silencieux a chaque sync, non-reproductible.
@@ -124,7 +124,7 @@ mcp:
     hostnames:
       - proton-service-mcp.example.com
   image:
-    repository: ghcr.io/didlawowo/proton-service-mcp
+    repository: ghcr.io/didlawowo/proton-mcp-service-mcp
     # Tag immutable (semver), voir image.tag ci-dessus.
     pullPolicy: IfNotPresent
     tag: ""
